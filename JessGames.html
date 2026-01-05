@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Defender: Debug Edition</title>
+    <style>
+        /* CSS STYLES */
+        :root {
+            --primary-color: #0f0;
+            --bg-color: #0d1117;
+            --panel-bg: rgba(22, 27, 34, 0.95);
+            --gold-color: #ffd700;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        canvas { display: block; }
+
+        /* DEBUG CONSOLE (Only shows if there is an error) */
+        #error-console {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            color: #ff4444;
+            padding: 50px;
+            font-family: monospace;
+            font-size: 20px;
+            display: none; /* Hidden by default */
+            z-index: 9999;
+            white-space: pre-wrap;
+        }
+
+        /* UI LAYOUT */
+        #game-ui {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hud-top-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .hud-panel {
+            display: flex;
+            gap: 25px;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.5);
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+
+        #input-container {
+            align-self: center;
+            margin-bottom: 50px;
+            text-align: center;
+        }
+
+        #player-input {
+            background: rgba(0,0,0,0.6);
+            border: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            font-size: 48px;
+            padding: 10px 40px;
+            border-radius: 12px;
+            min-width: 150px;
+            display: inline-block;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+            min-height: 60px; /* Ensure visibility even if empty */
+        }
+
+        /* MODALS */
+        .modal {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background: var(--panel-bg);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid #30363d;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+        }
+
+        h1 { margin: 0 0 10px 0; color: var(--primary-color); font-size: 3em; letter-spacing: 2px; }
+        .btn {
+            background-color: #238636;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .btn:hover { background-color: #2ea043; }
+
+        .hidden { display: none !important; }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="error-console"></div>
+
+    <div id="game-ui">
+        <div class="hud-top-container">
+            <div class="hud-panel">
+                <span style="color:var(--gold-color)">HIGH SCORE: <span id="highscore-txt">0</span></span>
+            </div>
+            <div class="hud-panel">
+                <span style="color:#58a6ff">LEVEL: <span id="level-txt">1</span></span>
+                <span style="color:#e74c3c">HEALTH: <span id="health-txt">100%</span></span>
+                <span style="color:#f1c40f">SCORE: <span id="score-txt">0</span></span>
+            </div>
+        </div>
+        
+        <div id="input-container">
+            <div id="player-input"></div>
+            <div style="color: #8b949e; margin-top:10px; font-size: 14px;">TYPE ANSWER & PRESS ENTER</div>
+        </div>
+    </div>
+
+    <div id="start-modal" class="modal">
+        <div class="modal-content">
+            <h1>MATH DEFENDER</h1>
+            <p>Defend the city from textured meteors using mental math.</p>
+            <p style="color: var(--gold-color)">CURRENT HIGH SCORE: <span id="start-highscore">0</span></p>
+            <button class="btn" onclick="window.startGame()">INITIATE DEFENSE</button>
+        </div>
+    </div>
+
+    <div id="report-modal" class="modal hidden">
+        <div class="modal-content">
+            <h1 style="color: #e74c3c">MISSION FAILED</h1>
+            <h2 id="record-msg" style="color: #58a6ff">Performance Report</h2>
+            
+            <div style="margin: 20px 0; font-size: 18px; color: #ccc; text-align: left;">
+                <p>Final Score: <span id="rep-score" style="float:right; color:white; font-weight:bold">0</span></p>
+                <p>Meteors Destroyed: <span id="rep-solved" style="float:right; color:white; font-weight:bold">0</span></p>
+            </div>
+
+            <button class="btn" onclick="window.startGame()">RETRY MISSION</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        // --- 1. ERROR HANDLING SYSTEM ---
+        window.onerror = function(message, source, lineno, colno, error) {
+            const consoleDiv = document.getElementById('error-console');
+            consoleDiv.style.display = 'block';
+            consoleDiv.innerHTML += `CRITICAL ERROR:\n${message}\nLine: ${lineno}\n\nPlease take a screenshot of this and show it to the AI.\n\n`;
+            return false;
+        };
+
+        // --- 2. GAME CODE WRAPPED IN ONLOAD ---
+        window.onload = function() {
+            try {
+                // --- SETUP ---
+                const canvas = document.getElementById("gameCanvas");
+                if(!canvas) throw new Error("Canvas element not found!");
+                const ctx = canvas.getContext("2d");
+
+                // --- DATABASE (SAFE MODE) ---
+                let highScore = 0;
+                try {
+                    highScore = localStorage.getItem('mathDefenderHighScore') || 0;
+                } catch(e) {
+                    console.log("Local Storage blocked (Incognito mode?), High Score disabled.");
+                }
+                
+                document.getElementById("highscore-txt").innerText = highScore;
+                document.getElementById("start-highscore").innerText = highScore;
+                
+                // --- GAME STATE ---
+                let state = {
+                    isPlaying: false,
+                    score: 0,
+                    level: 1,
+                    health: 100,
+                    input: "",
+                    meteors: [],
+                    particles: [],
+                    lasers: [],
+                    stars: [],
+                    lastTime: 0,
+                    spawnTimer: 0,
+                    spawnRate: 2000,
+                    stats: { totalSolved: 0, shotsFired: 0 }
+                };
+
+                // --- RESIZE ---
+                function resize() {
+                    canvas.width = window.innerWidth;
+                    canvas.height = window.innerHeight;
+                    initStars();
+                }
+                window.addEventListener('resize', resize);
+
+                function initStars() {
+                    state.stars = [];
+                    for(let i=0; i<150; i++) {
+                        state.stars.push({
+                            x: Math.random() * canvas.width,
+                            y: Math.random() * canvas.height,
+                            size: Math.random() * 1.5,
+                            speed: Math.random() * 0.8
+                        });
+                    }
+                }
+
+                // --- GLOBAL FUNCTIONS (Attached to Window for HTML buttons) ---
+                window.startGame = function() {
+                    state.isPlaying = true;
+                    state.score = 0;
+                    state.level = 1;
+                    state.health = 100;
+                    state.input = "";
+                    state.meteors = [];
+                    state.particles = [];
+                    state.lasers = [];
+                    state.spawnRate = 2000;
+                    state.stats.totalSolved = 0;
+                    state.stats.shotsFired = 0;
+
+                    document.getElementById("start-modal").classList.add("hidden");
+                    document.getElementById("report-modal").classList.add("hidden");
+                    document.getElementById("player-input").innerText = "";
+                    document.getElementById("game-ui").classList.remove("shake");
+                    
+                    let recMsg = document.getElementById("record-msg");
+                    recMsg.innerText = "Performance Report";
+                    recMsg.style.color = "#58a6ff";
+                    
+                    updateHUD();
+                    resize();
+                    requestAnimationFrame(gameLoop);
+                };
+
+                function gameOver() {
+                    state.isPlaying = false;
+                    
+                    // Safe Database Update
+                    if (state.score > highScore) {
+                        highScore = state.score;
+                        try {
+                            localStorage.setItem('mathDefenderHighScore', highScore);
+                        } catch(e) {}
+                        
+                        document.getElementById("record-msg").innerText = "NEW HIGH SCORE!";
+                        document.getElementById("record-msg").style.color = "gold";
+                        document.getElementById("highscore-txt").innerText = highScore;
+                        document.getElementById("start-highscore").innerText = highScore;
+                    }
+
+                    document.getElementById("rep-score").innerText = state.score;
+                    document.getElementById("rep-solved").innerText = state.stats.totalSolved;
+                    document.getElementById("report-modal").classList.remove("hidden");
+                }
+
+                // --- INPUT ---
+                window.addEventListener('keydown', (e) => {
+                    if (!state.isPlaying) return;
+                    
+                    // Allow Numpad and Top Row numbers
+                    if ((e.key >= '0' && e.key <= '9') || e.key === '-') {
+                        state.input += e.key;
+                    } else if (e.key === 'Backspace') {
+                        state.input = state.input.slice(0, -1);
+                    } else if (e.key === 'Enter') {
+                        fireLaser(state.input);
+                        state.input = "";
+                    }
+                    document.getElementById("player-input").innerText = state.input;
+                });
+
+                // --- GAME LOGIC ---
+                function fireLaser(val) {
+                    if (val === "") return;
+                    let answer = parseInt(val);
+                    state.stats.shotsFired++;
+
+                    let index = state.meteors.findIndex(m => m.answer === answer);
+
+                    if (index !== -1) {
+                        let m = state.meteors[index];
+                        state.lasers.push({
+                            x1: canvas.width / 2, y1: canvas.height - 50,
+                            x2: m.x, y2: m.y, life: 1.0
+                        });
+                        createExplosion(m.x, m.y, "#f1c40f");
+                        state.meteors.splice(index, 1);
+                        state.score += 10 + (state.level * 5);
+                        state.stats.totalSolved++;
+
+                        if (state.stats.totalSolved % 5 === 0) {
+                            state.level++;
+                            state.spawnRate = Math.max(600, 2000 - (state.level * 120));
+                        }
+                    } else {
+                        state.score = Math.max(0, state.score - 5);
+                        let inp = document.getElementById("player-input");
+                        inp.style.borderColor = "red";
+                        setTimeout(() => inp.style.borderColor = "#0f0", 200);
+                    }
+                    updateHUD();
+                }
+
+                function spawnMeteor() {
+                    let types = ['+'];
+                    if (state.level >= 3) types.push('-');
+                    if (state.level >= 5) types.push('x');
+                    let type = types[Math.floor(Math.random() * types.length)];
+                    let num1, num2, question, answer;
+                    let range = 10 + (state.level * 3);
+
+                    if (type === '+') {
+                        num1 = Math.floor(Math.random() * range) + 2;
+                        num2 = Math.floor(Math.random() * range) + 2;
+                        question = `${num1} + ${num2}`; answer = num1 + num2;
+                    } else if (type === '-') {
+                        num1 = Math.floor(Math.random() * range) + 2;
+                        num2 = Math.floor(Math.random() * range) + 2;
+                        if (num1 < num2) [num1, num2] = [num2, num1];
+                        question = `${num1} - ${num2}`; answer = num1 - num2;
+                    } else {
+                        range = Math.min(12, 4 + Math.floor(state.level / 2));
+                        num1 = Math.floor(Math.random() * range) + 2;
+                        num2 = Math.floor(Math.random() * range) + 2;
+                        question = `${num1} x ${num2}`; answer = num1 * num2;
+                    }
+
+                    state.meteors.push({
+                        x: Math.random() * (canvas.width - 150) + 75,
+                        y: -60,
+                        question: question, answer: answer,
+                        speed: 1 + (state.level * 0.2),
+                        radius: 40 + Math.random() * 10,
+                        rotation: Math.random() * Math.PI,
+                        rotSpeed: (Math.random() - 0.5) * 0.05,
+                        seed: Math.random()
+                    });
+                }
+
+                function createExplosion(x, y, color) {
+                    for(let i=0; i<20; i++) {
+                        state.particles.push({
+                            x: x, y: y,
+                            vx: (Math.random() - 0.5) * 15,
+                            vy: (Math.random() - 0.5) * 15,
+                            life: 1.0, color: color, size: Math.random() * 5 + 2
+                        });
+                    }
+                }
+
+                function updateHUD() {
+                    document.getElementById("score-txt").innerText = state.score;
+                    document.getElementById("level-txt").innerText = state.level;
+                    document.getElementById("health-txt").innerText = state.health + "%";
+                    if(state.health < 30) document.getElementById("health-txt").style.color = "red";
+                }
+
+                // --- LOOP ---
+                function gameLoop(timestamp) {
+                    if (!state.isPlaying) return;
+                    state.lastTime = timestamp;
+
+                    ctx.fillStyle = "#0d1117";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Stars
+                    ctx.fillStyle = "white";
+                    state.stars.forEach(star => {
+                        ctx.globalAlpha = Math.random() * 0.4 + 0.2;
+                        ctx.fillRect(star.x, star.y, star.size, star.size);
+                        star.y += star.speed;
+                        if(star.y > canvas.height) star.y = 0;
+                    });
+                    ctx.globalAlpha = 1.0;
+
+                    // Spawn
+                    if (timestamp - state.spawnTimer > state.spawnRate) {
+                        spawnMeteor();
+                        state.spawnTimer = timestamp;
+                    }
+
+                    // Turret
+                    ctx.fillStyle = "#2c3e50";
+                    ctx.fillRect(canvas.width/2 - 50, canvas.height - 40, 100, 40);
+                    ctx.beginPath();
+                    ctx.arc(canvas.width/2, canvas.height - 40, 40, Math.PI, 0);
+                    let tGrad = ctx.createLinearGradient(0, canvas.height-80, 0, canvas.height);
+                    tGrad.addColorStop(0, "#3498db"); tGrad.addColorStop(1, "#2980b9");
+                    ctx.fillStyle = tGrad;
+                    ctx.fill();
+
+                    // Meteors
+                    for (let i = state.meteors.length - 1; i >= 0; i--) {
+                        let m = state.meteors[i];
+                        m.y += m.speed;
+                        m.rotation += m.rotSpeed;
+
+                        ctx.save();
+                        ctx.translate(m.x, m.y);
+                        ctx.rotate(m.rotation);
+                        
+                        let grad = ctx.createRadialGradient(0, 0, m.radius * 0.2, 0, 0, m.radius);
+                        grad.addColorStop(0, "#f1c40f"); grad.addColorStop(0.6, "#d35400"); grad.addColorStop(1, "#641e16");
+                        ctx.fillStyle = grad;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, m.radius, 0, Math.PI*2); // Simplified shape for safety
+                        ctx.fill();
+                        
+                        ctx.restore();
+
+                        ctx.shadowColor = "black"; ctx.shadowBlur = 10;
+                        ctx.fillStyle = "white"; ctx.font = "bold 28px Verdana";
+                        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                        ctx.fillText(m.question, m.x, m.y);
+                        ctx.shadowBlur = 0;
+
+                        if (m.y > canvas.height) {
+                            state.health -= 20;
+                            updateHUD();
+                            state.meteors.splice(i, 1);
+                            createExplosion(m.x, canvas.height, "#c0392b");
+                            let ui = document.getElementById("game-ui");
+                            ui.classList.remove("shake");
+                            void ui.offsetWidth;
+                            ui.classList.add("shake");
+                            if (state.health <= 0) gameOver();
+                        }
+                    }
+
+                    // Lasers
+                    ctx.lineCap = "round";
+                    for (let i = state.lasers.length - 1; i >= 0; i--) {
+                        let l = state.lasers[i];
+                        l.life -= 0.08;
+                        ctx.shadowBlur = 20; ctx.shadowColor = "#0f0";
+                        ctx.strokeStyle = `rgba(150, 255, 150, ${l.life})`;
+                        ctx.lineWidth = 8;
+                        ctx.beginPath();
+                        ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2);
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                        if (l.life <= 0) state.lasers.splice(i, 1);
+                    }
+
+                    // Particles
+                    for (let i = state.particles.length - 1; i >= 0; i--) {
+                        let p = state.particles[i];
+                        p.x += p.vx; p.y += p.vy;
+                        p.life -= 0.03;
+                        ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                        ctx.fill();
+                        if (p.life <= 0) state.particles.splice(i, 1);
+                    }
+                    ctx.globalAlpha = 1.0;
+
+                    requestAnimationFrame(gameLoop);
+                }
+
+                // Initial Resize
+                resize();
+                initStars();
+
+            } catch (err) {
+                // If anything crashes during setup, show it
+                document.getElementById('error-console').style.display = 'block';
+                document.getElementById('error-console').innerHTML += `SETUP ERROR: ${err.message}\n`;
+            }
+        };
+    </script>
+</body>
+</html>
